@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>Zoomify Viewer Frame</title>
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #0a1018; }
+    #myContainer { width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+  <div id="myContainer"></div>
+  <script src="ZoomifyImageViewerPro-min.js"></script>
+  <script>
+    // 监听来自父页面的消息
+    window.addEventListener("message", function (event) {
+      if (!event.data || event.data.action !== "load") return;
+
+      var data = event.data;
+      var xmlPath = data.xmlPath;
+      var params = "zNavigatorFit=-1&zRotationVisible=1";
+
+      // 重置 Zoomify 状态
+      if (typeof Z !== 'undefined') {
+        Z.showImage.done = false;
+        Z.comparisonPath = null;
+        Z.overlayPath = null;
+        Z.imagePath = null;
+        Z.parameters = null;
+        Z.xmlParametersPath = null;
+        if (Z.Viewer) {
+          try { Z.Viewer.dispose(); } catch (e) {}
+          Z.Viewer = null;
+        }
+      }
+
+      // 清空容器
+      var container = document.getElementById("myContainer");
+      container.innerHTML = "";
+
+      // 延迟加载，确保容器已清空
+      setTimeout(function () {
+        try {
+          if (data.mode === "side") {
+            Z.showImage("myContainer", null, "zComparisonPath=" + xmlPath + "&" + params);
+          } else {
+            // 叠加模式：需要指定主图 (imagePath) 和叠加图 (overlayPath)
+            var overlayXmlPath = xmlPath;
+            var imagePath = overlayXmlPath.replace("/overlay.xml", "/orig");
+            Z.showImage("myContainer", imagePath, "zOverlayPath=" + overlayXmlPath + "&" + params);
+          }
+          // 强制设置最大缩放为 40 倍（绕过 Zoomify 的转换 bug）
+          setTimeout(function() {
+            if (typeof Z !== 'undefined' && Z.maxZ) {
+              Z.maxZ = 40;  // 40 倍放大
+            }
+          }, 500);
+          // 通知父页面加载成功
+          if (event.source && event.source.postMessage) {
+            event.source.postMessage({ action: "loaded", case: data.case }, "*");
+          }
+        } catch (err) {
+          console.error("Zoomify load error:", err);
+        }
+      }, 100);
+    });
+  </script>
+</body>
+</html>
