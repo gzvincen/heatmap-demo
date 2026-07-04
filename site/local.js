@@ -54,6 +54,32 @@
   });
   updatePairPreview();
 
+  // ─── 选择本机文件夹 ────────────────────────────────────────────
+  window.selectFolder = function () {
+    if (isBuilding) { alert("构建正在进行中，请稍后再选择文件夹"); return; }
+
+    var btn = $("btnSelectFolder");
+    btn.disabled = true;
+    btn.textContent = "选择中…";
+
+    fetch("/api/select-folder")
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.error) {
+          if (data.error !== "已取消选择") alert(data.error);
+          return;
+        }
+        $("folderPath").value = data.folder || "";
+      })
+      .catch(function (err) {
+        alert("打开文件夹选择器失败: " + err.message);
+      })
+      .finally(function () {
+        btn.disabled = false;
+        btn.textContent = "选择";
+      });
+  };
+
   // ─── 构建瓦片 ──────────────────────────────────────────────────
   function getPairParams() {
     var radios = document.getElementsByName("pairMode");
@@ -78,6 +104,7 @@
 
     isBuilding = true;
     $("btnBuild").disabled = true;
+    $("btnSelectFolder").disabled = true;
     $("btnBuild").textContent = "构建中…";
 
     // 显示进度区，清空日志
@@ -117,6 +144,7 @@
   function resetBuildBtn() {
     isBuilding = false;
     $("btnBuild").disabled = false;
+    $("btnSelectFolder").disabled = false;
     $("btnBuild").textContent = "构建瓦片";
   }
 

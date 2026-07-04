@@ -4,6 +4,7 @@
 提供静态文件服务 + API：
   GET  /api/tile-status    返回当前瓦片构建进度
   GET  /api/case-list      返回可用病理图列表
+  GET  /api/select-folder  打开本机文件夹选择框并返回路径
   POST /api/build-tiles    触发瓦片构建
   GET  /tiles/...          服务瓦片文件（从配置的 tiles 目录）
 
@@ -14,6 +15,7 @@ Usage: python3 serve.py [port]   (default 8000)
 """
 import json
 import os
+import platform
 import subprocess
 import sys
 import threading
@@ -70,6 +72,54 @@ def _read_progress():
         return json.load(f)
 
 
+def _select_folder():
+    """打开本机目录选择框，返回用户选择的真实路径。"""
+    system = platform.system()
+
+    if system == "Darwin":
+        script = 'POSIX path of (choose folder with prompt "选择病理图文件夹")'
+        result = subprocess.run(
+            ["osascript", "-e", script],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            return None, "已取消选择" if result.returncode == 1 else result.stderr.strip()
+        return result.stdout.strip(), None
+
+    if system == "Windows":
+        script = (
+            "Add-Type -AssemblyName System.Windows.Forms; "
+            "$d = New-Object System.Windows.Forms.FolderBrowserDialog; "
+            "$d.Description = '选择病理图文件夹'; "
+            "if ($d.ShowDialog() -eq 'OK') { $d.SelectedPath }"
+        )
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-STA", "-Command", script],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            return None, result.stderr.strip() or "文件夹选择器启动失败"
+        folder = result.stdout.strip()
+        return (folder, None) if folder else (None, "已取消选择")
+
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+        folder = filedialog.askdirectory(title="选择病理图文件夹")
+        root.destroy()
+        return (folder, None) if folder else (None, "已取消选择")
+    except Exception as exc:
+        return None, "当前环境无法打开文件夹选择器: %s" % exc
+
+
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=ROOT, **kwargs)
@@ -92,6 +142,8 @@ class Handler(SimpleHTTPRequestHandler):
             self._handle_tile_status()
         elif path == "/api/case-list":
             self._handle_case_list()
+        elif path == "/api/select-folder":
+            self._handle_select_folder()
         elif path.startswith("/tiles/"):
             self._serve_tile(path)
         else:
@@ -117,6 +169,16 @@ class Handler(SimpleHTTPRequestHandler):
         with open(manifest_path, "r") as f:
             cases = json.load(f)
         _json_response(self, {"cases": cases, "total": len(cases)})
+
+    def _handle_select_folder(self):
+        folder, error = _select_folder()
+        if error:
+            _json_response(self, {"error": error}, 400)
+            return
+        if not folder or not os.path.isdir(folder):
+            _json_response(self, {"error": "文件夹路径无效"}, 400)
+            return
+        _json_response(self, {"folder": folder})
 
     def _serve_tile(self, path):
         """服务 /tiles/... 请求，从配置的 tiles 目录读取文件。"""

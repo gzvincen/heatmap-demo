@@ -217,6 +217,7 @@ python3 tile_folder.py "/path/to/images" --force
 |------|------|------|
 | `/api/case-list` | GET | 获取可用病理图列表 |
 | `/api/tile-status` | GET | 获取当前构建进度 |
+| `/api/select-folder` | GET | 打开本机文件夹选择框并返回路径 |
 | `/api/build-tiles` | POST | 触发瓦片构建 |
 | `/tiles/...` | GET | 访问瓦片文件 |
 
